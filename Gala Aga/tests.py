@@ -20,6 +20,8 @@ running = True
 current_frame = 0
 clock = pygame.time.Clock()
 
+print(255/2)
+
 while running:
     for event in pygame.event.get():
         if event.type == pygame.QUIT:

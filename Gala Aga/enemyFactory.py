@@ -1,4 +1,4 @@
-from objects import Enemy, enemy_spritesheet, frame_width, frame_height, wdt
+from objects import *
 from random import randint
 
 
@@ -12,7 +12,7 @@ def CriarInimigosColoridos(n):
     inimigos = []
     for _ in range(n):
         enemy = Enemy(
-            enemy_spritesheet,
+            enemy2_spritesheet,
             frame_width,
             frame_height,
             randint(0, wdt - frame_width),
@@ -40,27 +40,35 @@ def CriarMiniBoss(n=1):
 
 
 def CriarBossFinal(n=1):
-    boss = Enemy(
-        enemy_spritesheet,
-        frame_width,
-        frame_height,
-        wdt // 2 - frame_width // 2,
-        -150,
-        3,
-    )
-    return [boss]
+    from objects import Boss
+    return [Boss(wdt // 2 - 65 // 2, 50)]  # 65 é o tamanho do frame do boss
 
 
 def get_inimigos_para_fase(stage):
     if 1 <= stage <= 3:
-        return CriarInimigosNormais(10)
+        # Só inimigos normais
+        return CriarInimigosNormais(8 + stage)  
+
     elif 4 <= stage <= 5:
-        return CriarInimigosNormais(5) + CriarInimigosColoridos(5)
-    elif 6 <= stage <= 8:
-        return CriarMiniBoss(1)
+        # Metade normais, metade coloridos
+        return CriarInimigosNormais(4 + stage) + CriarInimigosColoridos(4 + stage)
+
+    elif 6 <= stage <= 7:
+        # Mistura com mais coloridos e miniboss
+        return CriarInimigosColoridos(5 + stage) + CriarMiniBoss(1)
+
+    elif stage == 8:
+        # Só miniboss
+        return CriarMiniBoss(2)
+
     elif stage == 9:
-        return CriarInimigosNormais(7) + CriarInimigosColoridos(7)
+        # Muitos normais e coloridos
+        return CriarInimigosNormais(6) + CriarInimigosColoridos(6)
+
     elif stage == 10:
+        # Boss final
         return CriarBossFinal(1)
+
     else:
+        # Caso padrão (se stage > 10)
         return CriarInimigosNormais(10)

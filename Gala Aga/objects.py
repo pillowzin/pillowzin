@@ -58,7 +58,7 @@ class Enemy:
             self.frame_width,
             self.frame_height,
         )
-        print(f"Enemy draw - current_frame: {self.current_frame}, frame_rect: {frame_rect}, sprite_sheet size: {self.sprite_sheet.get_size()}")
+
         frame_img = self.sprite_sheet.subsurface(frame_rect)
         frame_img = pygame.transform.rotate(frame_img, 180)
         screen.blit(frame_img, (self.x, self.y))
@@ -87,6 +87,33 @@ enemy_spritesheet = pygame.transform.scale(
 frame_width = int(frame_width_original * scale_factor)
 frame_height = int(frame_height_original * scale_factor)
 
+# --- inimigos coloridos ---
+enemy2_spritesheet = pygame.image.load("sprites/enemy2.png")
+scale_factor2 = 2.5  # ajuste se quiser
+frame_width_original2 = 32
+frame_height_original2 = 16
+num_frames2 = enemy2_spritesheet.get_width() // frame_width_original2
+
+sprite_width_scaled2 = frame_width_original2 * num_frames2 * scale_factor2
+sprite_height_scaled2 = frame_height_original2 * scale_factor2
+
+enemy2_spritesheet = pygame.transform.scale(
+    enemy2_spritesheet,
+    (int(sprite_width_scaled2), int(sprite_height_scaled2))
+)
+
+frame_width2 = int(frame_width_original2 * scale_factor2)
+frame_height2 = int(frame_height_original2 * scale_factor2)
+
+# --- Boss ---
+boss_spritesheet = pygame.image.load("sprites/boss.png")
+boss_frames = []
+frame_boss_w = 65
+frame_boss_h = 65
+for i in range(4):
+    frame = boss_spritesheet.subsurface(pygame.Rect(i * frame_boss_w, 0, frame_boss_w, frame_boss_h))
+    boss_frames.append(frame)
+
 def CriarInimigos(n):
     return [
         Enemy(
@@ -99,6 +126,67 @@ def CriarInimigos(n):
         )
         for _ in range(n)
     ]
+
+
+def CriarInimigosColoridos(n):
+    return [
+        Enemy(
+            enemy2_spritesheet,
+            frame_width2,
+            frame_height2,
+            randint(0, wdt - frame_width2),
+            randint(-100, 0),
+            randint(2, 4) + randint(0, 3) / 2,
+        )
+        for _ in range(n)
+    ]
+
+
+class Boss:
+    def __init__(self, x, y, speed=0):
+        self.frames = boss_frames
+        self.current_frame = 0
+        self.frame_speed = 6
+        self.frame_counter = 0
+        self.x = x
+        self.y = y
+        self.speed = speed
+        self.rect = pygame.Rect(x, y, frame_boss_w, frame_boss_h)
+        self.vida = 400  # vida do boss
+
+
+    def update_animation(self):
+        self.frame_counter += 1
+        if self.frame_counter >= self.frame_speed:
+            self.frame_counter = 0
+            self.current_frame = (self.current_frame + 1) % len(self.frames)
+
+
+    def move(self):
+        # Fica parado, só atualiza animação
+        self.update_animation()
+        self.rect.topleft = (self.x, self.y)
+
+
+    def draw_health_bar(self, screen):
+        bar_width = 200
+        bar_height = 20
+        x = wdt // 2 - bar_width // 2
+        y = 20  # topo da tela
+        # fundo da barra
+        pygame.draw.rect(screen, (80, 80, 80), (x, y, bar_width, bar_height))
+        # barra real
+        vida_ratio = self.vida / 400  # 400 é vida máxima
+        pygame.draw.rect(screen, (200, 0, 0), (x, y, int(bar_width * vida_ratio), bar_height))
+        # borda
+        pygame.draw.rect(screen, (255, 255, 255), (x, y, bar_width, bar_height), 2)
+
+
+    def draw(self, screen):
+        frame = self.frames[self.current_frame]
+        frame = pygame.transform.scale(frame, (frame.get_width() * 3.5, frame.get_height() * 3.5))
+        self.rect.center = (self.x, self.y)
+        screen.blit(frame, (self.x, self.y))
 
 
 class Player:
@@ -136,6 +224,21 @@ class Player:
 
     def draw(self, screen):
         screen.blit(self.img, self.rect.topleft)
+
+
+    def draw_health_bar(self, screen):
+        bar_width = 200
+        bar_height = 20
+        x = wdt // 2 - bar_width // 2
+        y = 20  # topo da tela
+
+        # fundo da barra
+        pygame.draw.rect(screen, (80, 80, 80), (x, y, bar_width, bar_height))
+        # barra real
+        vida_ratio = self.vida / 400  # 400 é vida máxima
+        pygame.draw.rect(screen, (200, 0, 0), (x, y, int(bar_width * vida_ratio), bar_height))
+        # borda
+        pygame.draw.rect(screen, (255, 255, 255), (x, y, bar_width, bar_height), 2)
 
 
 class Bullet:

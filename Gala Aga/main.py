@@ -5,6 +5,7 @@ from objects import *
 from random import randint
 from gameStates import *
 from enemyFactory import get_inimigos_para_fase
+from effects import Star
 
 pygame.init()
 pygame.mixer.init()
@@ -33,6 +34,9 @@ bullet_cooldown = 0
 explosion_spritesheet = pygame.image.load('sprites/explosion.png').convert_alpha()
 explosions = []
 
+#starsssss
+stars = [Star() for _ in range(50)]
+
 # loop do jogo
 while running:
     screen.fill((0, 0, 0))
@@ -52,6 +56,9 @@ while running:
             game_state = 'jogando'
 
     elif game_state == 'jogando':
+        for star in stars:
+            star.move()
+            star.draw(screen)
         game_state, stage, bullet_cooldown = PLAYING(
             screen, player, enemies, bullets, stage, keys, bullet_cooldown,
             explosion_spritesheet, explosions, clock
@@ -73,7 +80,7 @@ while running:
 
             game_state = 'jogando'
     elif game_state == 'game_complete':
-        game_state = GAME_COMPLETE(screen, player, keys)
+        game_state, player, enemies, bullets, stage = GAME_COMPLETE(screen, player, enemies, bullets, stage, keys)
 
     elif game_state == 'game_over':
         game_state, player, enemies, bullets, stage = GAMEOVER(screen, player, enemies, bullets, stage, keys)

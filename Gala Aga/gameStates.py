@@ -96,7 +96,7 @@ def PLAYING(
     stage_font = pygame.font.Font("misc/PressStart2P-Regular.ttf", 12)
     points_font = pygame.font.Font("misc/PressStart2P-Regular.ttf", 12)
     vidas_font = pygame.font.Font("misc/PressStart2P-Regular.ttf", 12)
-
+    damage_texts = []
     # --- HUD ---
     stage_render = stage_font.render(f"STAGE {stage}", True, (255, 255, 255))
     points_render = points_font.render(f"SCORE {player.pontos}", True, (255, 255, 255))
@@ -105,6 +105,8 @@ def PLAYING(
     screen.blit(points_render, (wdt // 2 - 180, 30))
     screen.blit(stage_render, (wdt // 2 - 40, 30))
     screen.blit(vidas_render, (wdt // 2 + 80, 30))
+
+
 
     # --- Player ---
     player.update()
@@ -120,13 +122,18 @@ def PLAYING(
 
     # --- Inimigos ---
     for enemy in enemies[:]:
-        if player.rect.colliderect(enemy.rect):
-            player.vida -= 10
-            enemies.remove(enemy)
-            if player.vida <= 0:
-                return "game_over", stage, bullet_cooldown
-        enemy.move()
-        enemy.draw(screen)
+        if isinstance(enemy, Boss):
+            enemy.move()
+            enemy.draw(screen)
+            enemy.draw_health_bar(screen)
+        else:
+            if player.rect.colliderect(enemy.rect):
+                player.vida -= 10
+                enemies.remove(enemy)
+                if player.vida <= 0:
+                    return "game_over", stage, bullet_cooldown
+            enemy.move()
+            enemy.draw(screen)
 
     # --- Balas e colisões ---
     for bullet in bullets[:]:
@@ -137,13 +144,35 @@ def PLAYING(
             continue
         for enemy in enemies[:]:
             if bullet.collide(enemy):
-                enemies.remove(enemy)
+                if isinstance(enemy, Boss):
+                    enemy.vida -= 10  # aplica dano
+                    damage_texts.append({
+                        'text': "-10",
+                        'x': enemy.x + enemy.rect.width // 2,
+                        'y': enemy.y,
+                        'alpha': 255
+                    })
+                    if enemy.vida <= 0:
+                        enemies.remove(enemy)
+                else:
+                    enemies.remove(enemy)
                 player.pontos += 1
                 explosions.append(Explosion(enemy.x, enemy.y, explosion_spritesheet))
                 explosion_sound.play()
                 if bullet in bullets:
                     bullets.remove(bullet)
                 break
+
+    # --- Textos de dano ---
+    for dt in damage_texts[:]:
+        dmg_font = pygame.font.Font("misc/PressStart2P-Regular.ttf", 14)
+        dmg_surf = dmg_font.render(dt['text'], True, (255, 255, 0))
+        dmg_surf.set_alpha(dt['alpha'])
+        screen.blit(dmg_surf, (dt['x'], dt['y']))
+        dt['y'] -= 1  # sobe
+        dt['alpha'] -= 5  # fade out
+        if dt['alpha'] <= 0:
+            damage_texts.remove(dt)
 
     # --- Explosões ---
     for explosion in explosions[:]:
@@ -228,7 +257,7 @@ def STAGE_CLEARED(screen):
 
     return False
 
-def GAME_COMPLETE(screen, player, keys):
+def GAME_COMPLETE(screen, player, enemies, bullets, stage, keys):
     screen.fill((0, 0, 0))
     pygame.mouse.set_visible(True)
 
@@ -246,10 +275,15 @@ def GAME_COMPLETE(screen, player, keys):
     screen.blit(restart_render, (wdt//2 - restart_render.get_width()//2, hgt//2 + 50))
 
     if keys[pygame.K_r]:
-        player.vida = 100
-        player.pontos = 0
-        return "menu"  # volta pro menu
-    return "game_complete"
+        from enemyFactory import get_inimigos_para_fase
+        from objects import Player
+        player = Player("sprites/spaceship.png")
+        enemies = get_inimigos_para_fase(1)
+        bullets.clear()
+        stage = 1
+        return "menu", player, enemies, bullets, stage
+
+    return "game_complete", player, enemies, bullets, stage
 
 
 def GAMEOVER(screen, player, enemies, bullets, stage, keys):
