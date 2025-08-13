@@ -1,0 +1,504 @@
+----------------- formato das pastas
+(pasta princpal) Gala Aga:
+(pasta) misc:
+- icon.ico
+- PressStart2P-Regular.ttf
+
+(pasta) sounds:
+- background_music
+- laser_shoot
+
+(pasta) sprites:
+- potato.png
+- spaceship.png
+- sprite_sheet.png
+- player_explosion.png
+- explosion.png
+- enemy.png
+
+main.py
+objects.py
+gameStates.py
+effects.py
+const.py
+tests.py
+----------------------------------
+se voce lesse a porra do codigo, veria que eu ja fiz
+toma ai tudo denovo cara
+
+
+main.py:
+import pygame
+import time
+from const import *
+from objects import *
+from random import randint
+from gameStates import *
+
+pygame.init()
+pygame.mixer.init()
+
+window_icon = pygame.image.load('misc/icon.ico')
+pygame.display.set_icon(window_icon)
+screen = pygame.display.set_mode((wdt, hgt))
+
+pygame.display.set_caption("GALA AGA")
+clock = pygame.time.Clock()
+wait_start_time = None
+running = True
+
+#objetos
+player = Player('sprites/spaceship.png')
+enemies = CriarInimigos(10)
+bullets = []
+
+#estados do jogo
+game_state = 'menu'
+effects_surface = None
+stage = 0
+bullet_cooldown = 0
+
+#efeito de explosao
+explosion_spritesheet = pygame.image.load('sprites/explosion.png').convert_alpha()
+explosions = []
+
+#loop'do jogaaaaaaaaaao
+while running:
+	screen.fill((0, 0, 0))
+	clock.tick(60)
+	keys = pygame.key.get_pressed()
+
+	for event in pygame.event.get():
+		if event.type == pygame.QUIT:
+			running = False
+		if event.type == pygame.KEYDOWN:
+			if event.key == pygame.K_ESCAPE:
+				running = False
+				break
+
+	if game_state == 'menu':
+		effects_surface = MENU(screen, player, effects_surface)
+		if keys[pygame.K_SPACE]:
+			game_state = 'jogando'
+	elif game_state == 'jogando':
+		game_state, stage, bullet_cooldown = PLAYING(screen, player, enemies, bullets, stage, keys, bullet_cooldown, explosion_spritesheet, explosions, clock)
+	elif game_state == 'game_over':
+		game_state, player, enemies, bullets, stage = GAMEOVER(screen, player, enemies, bullets, stage, keys)
+
+	pygame.display.flip()
+
+pygame.quit()
+
+
+objects.py:
+import pygame
+from random import randint
+from const import *
+
+pygame.init()
+pygame.mixer.init()
+img_path = 'Gala Aga/sprites/'
+
+class Enemy:
+    margem_x = 10
+    def __init__(self, sprite_sheet, frame_width, frame_height, x, y, speed):
+        self.sprite_sheet = sprite_sheet
+        self.frame_width = frame_width
+        self.frame_height = frame_height
+
+        self.num_frames = sprite_sheet.get_width() // frame_width  # vai dar 2 aqui
+        self.current_frame = 0
+        self.frame_speed = 6
+        self.frame_counter = 0
+
+        self.x = max(self.margem_x, min(x, wdt - self.margem_x - self.frame_width))
+        self.y = y
+        self.speed = speed
+        self.rect = pygame.Rect(self.x, self.y, frame_width, frame_height)
+
+        self.wobble_direction = 1
+        self.wobble_count = 0
+
+    def update_animation(self):
+        self.frame_counter += 1
+        if self.frame_counter >= self.frame_speed:
+            self.frame_counter = 0
+            self.current_frame = (self.current_frame + 1) % self.num_frames
+
+    def move(self):
+        self.y += self.speed
+
+        self.wobble_count += 1
+        if self.wobble_count >= 40:
+            self.wobble_direction *= -1
+            self.wobble_count = 0
+
+        self.x += self.wobble_direction * 2
+        self.x = max(self.margem_x, min(self.x, wdt - self.margem_x - self.frame_width))
+
+        if self.y >= hgt:
+            self.y = -100
+            self.x = randint(self.margem_x, wdt - self.margem_x - self.frame_width)
+
+        self.rect.topleft = (self.x, self.y)
+        self.update_animation()
+
+    def draw(self, screen):
+        frame_rect = pygame.Rect(self.current_frame * self.frame_width, 0, self.frame_width, self.frame_height)
+        frame_img = self.sprite_sheet.subsurface(frame_rect)
+        frame_img = pygame.transform.rotate(frame_img, 180)
+        screen.blit(frame_img, (self.x, self.y))
+		
+
+scale_factor = 2.5
+frame_width_original = 16
+frame_height_original = 16
+num_frames = 2
+
+enemy_spritesheet = pygame.image.load('sprites/enemy.png')
+enemy_spritesheet = pygame.transform.scale(
+    enemy_spritesheet,
+    (int(frame_width_original * num_frames * scale_factor),
+     int(frame_height_original * scale_factor))
+)
+
+frame_width = int(frame_width_original * scale_factor)  # 40
+frame_height = int(frame_height_original * scale_factor)  # 40
+
+def CriarInimigos(n):
+    return [Enemy(
+        enemy_spritesheet,
+        frame_width,
+        frame_height,
+        randint(0, wdt - frame_width),
+        randint(-100, 0),
+        randint(2, 4) + randint(0, 3)/2
+    ) for _ in range(n)]
+
+
+class Player:
+	def __init__(self, img_path):
+		self.img = pygame.image.load(img_path)
+		self.img = pygame.transform.scale(
+		self.img, (int(self.img.get_width()*1.8), 
+		int(self.img.get_height()*1.8)))
+
+		self.x, self.y = pygame.mouse.get_pos()
+		self.rect = self.img.get_rect()
+		self.mask = pygame.mask.from_surface(self.img)
+		self.pontos = 0
+		self.vida = 100
+		self.laser_sound = pygame.mixer.Sound('sounds/laser_shoot.mp3')
+		self.laser_sound.set_volume(0.2)
+
+	def update(self):
+		margem = 10
+
+		self.x, self.y = pygame.mouse.get_pos()
+		self.rect.center = (self.x, self.y)
+		#pro x
+		if self.rect.left < margem:
+			self.rect.left = margem
+		if self.rect.right > wdt - margem:
+			self.rect.right = wdt - margem
+		
+		#pro y de baixo agora
+		if self.rect.bottom > hgt - margem:
+			self.rect.bottom = hgt - margem
+		
+		self.x, self.y = self.rect.center
+	
+	def draw(self, screen):
+		screen.blit(self.img, self.rect.topleft)
+
+
+class Bullet:
+	def __init__(self, x, y):
+		self.x = x
+		self.y = y
+		self.speed = 10
+		self.color = (255, 45, 0)
+		self.width = 5
+		self.height = 10
+
+
+	def move(self):
+		self.y -= self.speed
+
+
+	def draw(self, screen):
+		pygame.draw.rect(screen, self.color, (self.x, self.y, self.width, self.height))
+
+
+	def off_screen(self, height):
+		return self.y < 0 or self.y > height
+
+
+	def collide(self, enemy):
+		bullet_rect = pygame.Rect(self.x, self.y, self.width, self.height)
+		return bullet_rect.colliderect(enemy.rect)
+
+gameStates.py:
+import pygame
+import time
+from random import randint
+from objects import *
+from const import *
+from effects import *
+
+pygame.mixer.init()
+
+pygame.mixer.music.load('sounds/background_music.mp3')
+pygame.mixer.music.set_volume(0.1)
+
+explosion_sound = pygame.mixer.Sound('sounds/explosion.mp3')
+explosion_sound.set_volume(0.2)
+
+points_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 12)
+stage_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 12)
+
+msg_render_pos = (0+20, randint(0+80, hgt//2))
+
+waiting_next_stage = False
+waiting_start_time = 0
+next_stage_duration = 2500
+
+def MENU(screen, player, effects_surface):
+	if not pygame.mixer.music.get_busy():
+		pygame.mixer.music.play(-1)
+
+	def MainMenu():
+		nonlocal effects_surface
+		title_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 36)
+		subtitle_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 10)
+		start_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 10)
+
+		titleA = title_font.render("GALA", True, (255, 30, 0))
+		titleB = title_font.render("AGA", True, (0, 30, 255))
+		credit_text = subtitle_font.render("feito por jakezin", True, (255, 255, 255))
+
+		current_time = pygame.time.get_ticks()
+		show_start = (current_time // 500) % 2 == 0
+
+		if effects_surface is None:
+			effects_surface = pygame.Surface((wdt, hgt))
+			effects_surface.fill((0, 0, 0))
+			for i in range(200):
+				pygame.draw.rect(
+					effects_surface, 
+					(randint(0, 255), randint(0, 255), randint(0, 255)), 
+					(randint(0, wdt), randint(0, hgt), 2, 2)
+				)
+
+		screen.fill((0, 0, 0))
+		screen.blit(effects_surface, (0, 0))
+
+		screen.blit(titleA, (wdt // 2 - titleA.get_width() // 2, hgt // 8))
+		screen.blit(titleB, (wdt // 2 - titleB.get_width() // 2, hgt // 8 + 40))
+		screen.blit(player.img, (titleA.get_width() // 2 + 50, hgt // 8 + 35))
+		screen.blit(player.img, (titleA.get_width() // 2 + titleA.get_width() + 80, hgt // 8 + 35))
+
+		if show_start:
+			start_text = start_font.render("Pressione 'SPACE' para Iniciar", True, (255, 255, 0))
+			shadow = start_font.render("Pressione 'SPACE' para Iniciar", True, (0, 0, 0))
+			x = wdt // 2 - start_text.get_width() // 2
+			y = hgt // 4 + 40
+			screen.blit(shadow, (x + 2, y + 2))
+			screen.blit(start_text, (x, y))
+
+		screen.blit(credit_text, (wdt // 2 - credit_text.get_width() // 2, hgt // 3.8))
+
+	MainMenu()
+	return effects_surface
+
+
+def PLAYING(screen, player, enemies, bullets, stage, keys, bullet_cooldown, explosion_spritesheet, explosions, clock):
+	global waiting_next_stage, waiting_start_time
+	pygame.mouse.set_visible(False)
+
+	stage_render = stage_font.render(f"STAGE {stage}", True, (255, 255, 255))
+	vidas_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 12)
+	vidas_render = vidas_font.render(f"VIDAS {player.vida}", True, (255, 0, 0))
+	points_render = points_font.render(f"SCORE {player.pontos}", True, (255, 255, 255))	
+	perk_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 12)
+	perk_render = perk_font.render('+ VIDA!', True, (255, 255, 0))
+
+	#desenha o player
+	player.update()
+	player.draw(screen) 
+	#desenha o hud
+	screen.blit(points_render, (wdt // 2 - 180, 30))
+	screen.blit(stage_render, (wdt // 2 - 40, 30))
+	screen.blit(vidas_render, (wdt // 2 + 80, 30))	
+
+
+	#tirozinho pew pew
+	if bullet_cooldown == 0 and keys[pygame.K_q]:
+		player.laser_sound.play()
+		bullets.append(Bullet(player.rect.centerx-3, player.rect.top))
+		bullet_cooldown = 10	
+
+	if bullet_cooldown > 0:
+		bullet_cooldown -= 1	
+
+	#colisao do inimigo com o player
+	for enemy in enemies[:]:
+		if player.rect.colliderect(enemy.rect):
+			player.vida -= 10
+			enemies.remove(enemy)
+			vidas_render = vidas_font.render(f"VIDAS {player.vida}", True, (255, 0, 0))
+			if player.vida == 0:
+				return 'game_over', stage, bullet_cooldown	
+
+	#colisao da bala com o inimigo
+	for enemy in enemies:
+		enemy.move()
+		enemy.draw(screen)	
+
+	for bullet in bullets[:]:
+		bullet.move()
+		bullet.draw(screen) 
+		if bullet.off_screen(hgt):
+			bullets.remove(bullet)
+			continue	
+		for enemy in enemies[:]:
+			if bullet.collide(enemy):
+				enemies.remove(enemy)
+				player.pontos += 1
+				#kaboom
+				explosions.append(Explosion(enemy.x, enemy.y, explosion_spritesheet))
+				explosion_sound.play()
+				if bullet in bullets:
+					bullets.remove(bullet)
+				break	
+
+	#conta os inimigos e respawna eles
+	if len(enemies) == 0 and not waiting_next_stage:
+		waiting_next_stage = True
+		waiting_start_time = pygame.time.get_ticks()
+		return 'jogando', stage, bullet_cooldown
+
+#	perk_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 12)
+
+
+	for explosion in explosions[:]:
+		explosion.update()
+		explosion.draw(screen)
+		if explosion.is_finished():
+			explosions.remove(explosion)
+
+		#trocando o stage do bagui
+
+	if waiting_next_stage:
+		elapsed = pygame.time.get_ticks() - waiting_start_time
+
+		if elapsed < 1000:
+		    alpha = int((elapsed / 1000) * 255)
+		elif elapsed > next_stage_duration - 1000:
+		    alpha = int(((next_stage_duration - elapsed) / 1000) * 255)
+		else:
+		    alpha = 255
+
+		msg_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 18)
+		msg_surface = msg_font.render('Próxima Fase!', True, (255, 255, 255))
+		msg_surface.set_alpha(alpha)
+		x = (wdt - msg_surface.get_width()) // 2
+		y = (hgt - msg_surface.get_height()) // 2
+
+		overlay = pygame.Surface((wdt, hgt))
+		overlay.set_alpha(100)
+		overlay.fill((0, 0, 0))
+		screen.blit(overlay, (0, 0))
+
+		screen.blit(msg_surface, (x, y))
+
+		if elapsed >= next_stage_duration:
+			stage += 1
+			player.vida += 20
+			enemies.extend(CriarInimigos(10 * stage // 2))
+			for enemy in enemies:
+				enemy.speed += 2 * stage // 2
+			waiting_next_stage = False
+
+	# Remove todos os clock.tick() aqui
+
+	return 'jogando', stage, bullet_cooldown
+
+
+def GAMEOVER(screen, player, enemies, bullets, stage, keys):
+	pygame.mixer.music.stop()
+	screen.fill((0, 0, 0))
+	pygame.mouse.set_visible(True)
+
+	game_over_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 20)
+	game_over_render = game_over_font.render("GAME OVER", True, (255, 255, 255))
+
+	try_font = pygame.font.Font('misc/PressStart2P-Regular.ttf', 12)
+	try_render = try_font.render('Aperte R para tentar novamente.', False, (255, 255, 0))
+
+	screen.blit(game_over_render, (wdt // 2 - 100, hgt // 2 - 180))
+	screen.blit(try_render, (wdt // 2 - 180, hgt // 2 - 100))
+
+	if keys[pygame.K_r]:
+		pygame.mixer.music.play(-1)
+		player = Player('sprites/spaceship.png')
+		enemies = CriarInimigos(10)
+		bullets.clear()
+		stage = 0
+		player.vida = 100
+		player.pontos = 0
+		return 'jogando', player, enemies, bullets, stage
+
+	return 'game_over', player, enemies, bullets, stage
+
+
+effects.py:
+import pygame
+from const import *
+
+pygame.mixer.init()
+
+class Explosion:
+    def __init__(self, x, y, sprite_sheet):
+        self.x = x
+        self.y = y
+
+        self.frames = []
+        self.current_frame = 0
+        self.frame_speed = 4
+        self.frame_counter = 0
+        self.finished = False
+
+        frame_width = 32
+        frame_height = 32
+
+        # cortar o spritesheet
+        for i in range(5):
+            frame = sprite_sheet.subsurface(pygame.Rect(i * frame_width, 0, frame_width, frame_height))
+            frame = pygame.transform.scale(frame, (frame.get_width()*2, frame.get_height()*2))
+            self.frames.append(frame)
+
+
+    def update(self):
+        self.frame_counter += 1
+        if self.frame_counter >= self.frame_speed:
+            self.frame_counter = 0
+            self.current_frame += 1
+            if self.current_frame >= len(self.frames):
+                self.finished = True
+
+    def draw(self, screen):
+        if not self.finished:
+            screen.blit(self.frames[self.current_frame], (self.x, self.y))
+
+    def is_finished(self):
+        return self.finished
+
+
+const.py:
+wdt, hgt = 450, 540
+bullet_cooldown = 0
+stage = 0
+
+ 
+
